@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+</head>
+<body>
+<title>Семейное древо</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Inter:wght@400;500;600&family=PT+Mono&display=swap">
+<style>
+/* Layout: header band → generational tree (left) + person card (right); stacks on phones */
+:root {
+  --bg: #eef1ee;
+  --surface: #fbfcfb;
+  --ink: #1c2622;
+  --muted: #5c6b64;
+  --line: #cdd6d1;
+  --line-strong: #9fb0a8;
+  --accent: #2f5d4e;
+  --accent-soft: #dce8e2;
+  --male: #3c5f7d;
+  --female: #8a4a5e;
+  --other: #8a6d1f;
+  --danger: #a33b2b;
+  --f-display: "PT Serif", Georgia, "Times New Roman", serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-data: "PT Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141a18; --surface: #1c2421; --ink: #e4ebe7; --muted: #95a59e; --line: #2f3b36; --line-strong: #52655d;
+    --accent: #7fb8a3; --accent-soft: #243630; --male: #8cb1d1; --female: #d69aac; --other: #d8b660; --danger: #e07a68;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141a18; --surface: #1c2421; --ink: #e4ebe7; --muted: #95a59e; --line: #2f3b36; --line-strong: #52655d;
+  --accent: #7fb8a3; --accent-soft: #243630; --male: #8cb1d1; --female: #d69aac; --other: #d8b660; --danger: #e07a68;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 700; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(26px, 4vw, 34px); }
+h2 { font-size: 20px; }
+.eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+header.top p { margin: 4px 0 0; color: var(--muted); max-width: 60ch; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, .btn {
+  font: inherit; font-weight: 500; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); padding: 8px 14px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.primary:hover { filter: brightness(1.08); }
+button.danger { color: var(--danger); }
+button.danger.confirm { background: var(--danger); color: var(--surface); border-color: var(--danger); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .pcard:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tabs button { border: 0; border-radius: 0; background: transparent; }
+.tabs button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.status { font-size: 13px; color: var(--muted); }
+.status.warn { color: var(--danger); }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; min-width: 0; }
+
+/* Tree */
+.gen { display: flex; flex-direction: column; gap: 8px; padding-block: 14px; border-bottom: 1px dashed var(--line); }
+.gen:last-child { border-bottom: 0; }
+.gen-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.gen-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+.side { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; padding: 8px; border-radius: 10px; background: var(--bg); }
+.side-label { width: 100%; font-size: 12px; color: var(--muted); }
+.pcard {
+  width: 170px; min-height: 74px; text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  border-left: 4px solid var(--line); padding: 8px 12px; background: var(--surface);
+}
+.pcard.m { border-left-color: var(--male); }
+.pcard.f { border-left-color: var(--female); }
+.pcard.o { border-left-color: var(--other); }
+.tree-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 12px; }
+.tree { overflow-x: auto; margin-inline: -8px; }
+.tree-inner { position: relative; width: max-content; min-width: 100%; display: flex; flex-direction: column; gap: 52px; padding: 12px 8px 16px; }
+.tree-lines { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 0; }
+.tree-lines path { fill: none; stroke: var(--line-strong); stroke-width: 1.5; stroke-linecap: round; }
+.tree-lines path.couple { stroke: var(--accent); stroke-width: 2; }
+.trow { position: relative; z-index: 1; display: flex; justify-content: center; align-items: flex-end; gap: 16px; }
+.trow.gp { gap: 40px; align-items: flex-end; }
+.side { flex-direction: column; flex-wrap: nowrap; background: transparent; padding: 0; gap: 6px; }
+.side-label { text-align: center; }
+.side-cards { display: flex; gap: 16px; }
+.pcard { flex: none; }
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-group(*) { animation-duration: .5s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+}
+.pcard.focus { background: var(--accent-soft); border-color: var(--accent); border-left-width: 4px; box-shadow: 0 0 0 1px var(--accent); }
+.pcard .nm { font-weight: 600; line-height: 1.25; }
+.pcard .yrs { font-family: var(--f-data); font-size: 12.5px; color: var(--muted); }
+.pcard .rel { font-size: 11.5px; color: var(--muted); }
+.pcard.ghost { border-style: dashed; color: var(--muted); justify-content: center; align-items: center; text-align: center; font-size: 13px; }
+.empty-gen { color: var(--muted); font-size: 13px; }
+
+/* Detail */
+.detail { display: flex; flex-direction: column; gap: 14px; }
+.detail .full { font-family: var(--f-display); font-size: 22px; line-height: 1.25; }
+.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 14px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.facts .d { font-family: var(--f-data); font-size: 13.5px; }
+.notes { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; background: var(--bg); padding: 10px 12px; border-radius: 8px; margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.meta { font-size: 12.5px; color: var(--muted); }
+.links { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 13px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+
+/* List */
+.listbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.listbar input { flex: 1 1 220px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+td.d { font-family: var(--f-data); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--accent-soft); }
+
+/* Empty / sources */
+.emptystate { text-align: center; padding: 40px 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.emptystate p { color: var(--muted); max-width: 46ch; margin: 0; }
+.sources ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.sources a { color: var(--accent); }
+.sources li span { color: var(--muted); }
+
+/* Form dialog */
+dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; background: var(--surface); color: var(--ink); width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
+dialog::backdrop { background: rgb(0 0 0 / .45); }
+dialog form { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 520px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; min-width: 0; }
+input, select, textarea {
+  font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%;
+}
+textarea { min-height: 90px; resize: vertical; }
+.hint { font-size: 12px; color: var(--muted); font-weight: 400; }
+fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
+.spouse-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.spouse-list label { flex-direction: row; align-items: center; gap: 6px; font-size: 14px; color: var(--ink); background: var(--bg); padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); }
+.spouse-list input { width: auto; }
+.formfoot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+.formerr { color: var(--danger); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Общая семейная летопись</div>
+      <h1>Семейное древо</h1>
+      <p>Чтобы добавить человека или исправить сведения, заполните семейную таблицу и отправьте её тому, кто ведёт древо. У живых родственников здесь показаны только имена.</p>
+    </div>
+    <div class="toolbar">
+      <div class="tabs" role="group" aria-label="Вид">
+        <button id="tab-tree" aria-pressed="true">Древо</button>
+        <button id="tab-list" aria-pressed="false">Список</button>
+      </div>
+      <button id="btn-add" class="primary" hidden>+ Добавить человека</button>
+    </div>
+  </header>
+  <div id="status" class="status" role="status">Загружаю семью…</div>
+
+  <div class="layout">
+    <main class="panel" id="main">
+      <div class="emptystate">
+        <h2>Здесь появятся ваши родственники</h2>
+        <p>Древо подключается к общей базе. Если оно пустое, добавьте первого человека, например себя, а потом родителей, бабушек и дедушек.</p>
+      </div>
+    </main>
+    <aside class="panel" id="side"></aside>
+  </div>
+
+  <section class="panel sources">
+    <h2>Где искать сведения о предках</h2>
+    <ul>
+      <li><a href="https://pamyat-naroda.ru" target="_blank" rel="noopener">Память народа</a> <span>— участники Великой Отечественной: награды, боевой путь, документы</span></li>
+      <li><a href="https://obd-memorial.ru" target="_blank" rel="noopener">ОБД «Мемориал»</a> <span>— погибшие и пропавшие без вести в 1941–1945</span></li>
+      <li><a href="https://forum.vgd.ru" target="_blank" rel="noopener">Форум ВГД</a> <span>— генеалогический форум по сёлам, фамилиям и архивам</span></li>
+      <li><a href="https://www.familysearch.org" target="_blank" rel="noopener">FamilySearch</a> <span>— оцифрованные метрические книги и переписи</span></li>
+      <li><a href="https://bessmertnybarak.ru" target="_blank" rel="noopener">Бессмертный барак</a> <span>— репрессированные и раскулаченные</span></li>
+    </ul>
+    <p class="meta">Самый ценный источник — старшие родственники. Запишите их рассказы в поле «История и заметки», пока есть у кого спросить.</p>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <form id="pform" method="dialog" novalidate>
+    <h2 id="form-title">Новый человек</h2>
+    <div class="grid2">
+      <label>Фамилия<input id="f-last" autocomplete="off"></label>
+      <label>Имя *<input id="f-first" autocomplete="off" required></label>
+      <label>Отчество<input id="f-middle" autocomplete="off"></label>
+      <label>Девичья фамилия<input id="f-maiden" autocomplete="off"></label>
+      <label>Пол
+        <select id="f-gender"><option value="">не указан</option><option value="m">мужской</option><option value="f">женский</option><option value="o">другой / небинарный</option></select>
+      </label>
+      <span></span>
+      <label>Дата рождения<input id="f-bdate" placeholder="12.03.1931 или около 1900" autocomplete="off"><span class="hint">Можно только год или «около 1890»</span></label>
+      <label>Место рождения<input id="f-bplace" placeholder="с. Красное, Тамбовская губ." autocomplete="off"></label>
+      <label>Дата смерти<input id="f-ddate" placeholder="пусто, если жив(а)" autocomplete="off"></label>
+      <label>Место смерти / захоронения<input id="f-dplace" autocomplete="off"></label>
+    </div>
+    <fieldset>
+      <legend>Родство</legend>
+      <div class="grid2">
+        <label>Отец / родитель<select id="f-father"></select></label>
+        <label>Мать / родитель<select id="f-mother"></select></label>
+      </div>
+      <div>
+        <div class="hint" style="margin-bottom:6px">Супруг(а)</div>
+        <div class="spouse-list" id="f-spouses"></div>
+      </div>
+      <div>
+        <div class="hint" style="margin-bottom:6px">Братья и сёстры <span>(с общими родителями связываются сами)</span></div>
+        <div class="spouse-list" id="f-siblings"></div>
+      </div>
+    </fieldset>
+    <label>История и заметки<textarea id="f-notes" placeholder="Профессия, где жил(а), воспоминания, откуда сведения"></textarea></label>
+    <div class="formfoot">
+      <span class="formerr" id="form-err" role="alert"></span>
+      <div class="actions">
+        <button type="button" id="form-cancel">Отмена</button>
+        <button type="submit" class="primary" id="form-save">Сохранить</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<script type="application/json" id="tree-data">{"people": [], "updated": ""}</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const state = { people: new Map(), focus: null, view: "tree", canWrite: true, loaded: false, db: null, user: null, myId: null, editing: null, prefill: null, q: "" };
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") n.className = v; else if (k === "text") n.textContent = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else if (v !== false && v != null) n.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of kids.flat()) if (c != null) n.append(c);
+    return n;
+  };
+
+  // ---------- helpers ----------
+  const P = (id) => (id ? state.people.get(id) : null);
+  const shortName = (p) => [p.firstName, p.lastName].filter(Boolean).join(" ") || "Без имени";
+  const fullName = (p) => [p.lastName, p.firstName, p.middleName].filter(Boolean).join(" ") || "Без имени";
+  const year = (s) => { const m = String(s || "").match(/(\d{4})/); return m ? m[1] : ""; };
+  const years = (p) => {
+    const b = year(p.birthDate), d = year(p.deathDate);
+    if (!b && !d) return p.deathDate ? "† ?" : "";
+    return (b || "?") + (d ? " – " + d : (p.deathDate ? " – ?" : ""));
+  };
+  const sortKey = (p) => year(p.birthDate) || "9999";
+  const byBirth = (a, b) => sortKey(a).localeCompare(sortKey(b)) || shortName(a).localeCompare(shortName(b), "ru");
+  const parentsOf = (p) => [P(p.fatherId), P(p.motherId)].filter(Boolean);
+  const childrenOf = (id) => [...state.people.values()].filter((c) => c.fatherId === id || c.motherId === id).sort(byBirth);
+  const spousesOf = (p) => {
+    const ids = new Set(p.spouseIds || []);
+    for (const o of state.people.values()) if ((o.spouseIds || []).includes(p.id)) ids.add(o.id);
+    // co-parents count as partners too
+    for (const c of childrenOf(p.id)) { const other = c.fatherId === p.id ? c.motherId : c.fatherId; if (other) ids.add(other); }
+    ids.delete(p.id);
+    return [...ids].map(P).filter(Boolean);
+  };
+  const siblingsOf = (p) => [...state.people.values()].filter((o) => o.id !== p.id && (
+    (p.fatherId && o.fatherId === p.fatherId) || (p.motherId && o.motherId === p.motherId) ||
+    (p.siblingIds || []).includes(o.id) || (o.siblingIds || []).includes(p.id))).sort(byBirth);
+  const explicitSiblings = (p) => [...state.people.values()].filter((o) => o.id !== p.id && ((p.siblingIds || []).includes(o.id) || (o.siblingIds || []).includes(p.id))).map((o) => o.id);
+  const relWord = (p, m, f, n) => (p.gender === "m" ? m : p.gender === "f" ? f : n);
+
+  const setStatus = (t, warn) => { const s = $("status"); s.textContent = t; s.classList.toggle("warn", !!warn); };
+
+  // ---------- routing ----------
+  const setFocus = (id, push = true) => {
+    state.focus = id;
+    if (push) { try { history.replaceState(null, "", id ? "#" + id : location.pathname + location.search); } catch (e) { location.hash = id || ""; } }
+    let reduce = false; try { reduce = matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+    if (document.startViewTransition && !reduce && state.view === "tree" && document.querySelector(".tree-inner")) {
+      try { document.startViewTransition(() => render()); return; } catch (e) {}
+    }
+    render();
+  };
+  window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (h && P(h)) { state.focus = h; render(); } });
+
+  // ---------- rendering ----------
+  const card = (p, rel, extra = "") => {
+    const n = el("button", {
+      class: "pcard " + (p.gender || "") + " " + extra, type: "button", "data-id": p.id,
+      onclick: () => setFocus(p.id), "aria-label": fullName(p) + (rel ? ", " + rel : ""),
+    }, el("span", { class: "nm", text: shortName(p) }), el("span", { class: "yrs", text: years(p) || " " }), rel ? el("span", { class: "rel", text: rel }) : null);
+    const vt = "vt-" + String(p.id).replace(/[^A-Za-z0-9_-]/g, "_");
+    if (!vtNames.has(vt)) { vtNames.add(vt); n.style.viewTransitionName = vt; }
+    return n;
+  };
+
+  const addCard = (label, prefill) => state.canWrite ? el("button", { class: "pcard ghost", type: "button", onclick: () => openForm(null, prefill) }, "+ " + label) : null;
+
+  const genBlock = (label, ...content) => el("div", { class: "gen" }, el("div", { class: "gen-label", text: label }), ...content);
+
+  let vtNames = new Set();
+  const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => { const i = document.querySelector(".tree-inner"); if (i) drawLines(i); }) : null;
+
+  function renderTree() {
+    const main = $("main"); main.replaceChildren();
+    vtNames = new Set();
+    const f = P(state.focus);
+    if (!f) return;
+    const father = P(f.fatherId), mother = P(f.motherId);
+    const inner = el("div", { class: "tree-inner" });
+    const tree = el("div", { class: "tree" }, inner);
+    main.append(el("div", { class: "tree-head" },
+      el("h2", { text: "Ветвь: " + shortName(f) }),
+      el("span", { class: "meta", text: "Нажмите на родственника, чтобы перейти к его ветви" })), tree);
+    const row = (cls) => el("div", { class: "trow" + (cls ? " " + cls : "") });
+
+    // Grandparents, grouped by side
+    if (father || mother) {
+      const r = row("gp");
+      for (const [par, side, sideLabel] of [[father, "по отцу", "Со стороны отца"], [mother, "по матери", "Со стороны матери"]]) {
+        if (!par) continue;
+        const cards = el("div", { class: "side-cards" });
+        const gf = P(par.fatherId), gm = P(par.motherId);
+        const gpWord = (g) => relWord(g, "дедушка ", "бабушка ", "бабушка/дедушка ") + side;
+        if (gf) cards.append(card(gf, gpWord(gf))); else { const a = addCard("дедушка " + side, { childId: par.id, gender: "m", lastName: par.gender === "m" ? (par.lastName || "") : "" }); if (a) cards.append(a); }
+        if (gm) cards.append(card(gm, gpWord(gm))); else { const a = addCard("бабушка " + side, { childId: par.id, gender: "f" }); if (a) cards.append(a); }
+        if (cards.children.length) r.append(el("div", { class: "side" }, el("div", { class: "side-label", text: sideLabel }), cards));
+      }
+      if (r.children.length) inner.append(r);
+    }
+
+    // Parents
+    const pRow = row();
+    const parWord = (x) => relWord(x, "отец", "мать", "родитель");
+    if (father) pRow.append(card(father, parWord(father))); else { const a = addCard("отец", { childId: f.id, gender: "m", lastName: f.gender === "f" ? "" : (f.lastName || "") }); if (a) pRow.append(a); }
+    if (mother) pRow.append(card(mother, parWord(mother))); else { const a = addCard("мать", { childId: f.id, gender: "f" }); if (a) pRow.append(a); }
+    if (pRow.children.length) inner.append(pRow);
+
+    // Siblings · person · partners
+    const sRow = row();
+    const addSib = addCard("брат или сестра", { siblingId: f.id, fatherId: f.fatherId || "", motherId: f.motherId || "", lastName: f.gender === "f" ? "" : (f.lastName || "") });
+    if (addSib) sRow.append(addSib);
+    for (const s of siblingsOf(f)) sRow.append(card(s, relWord(s, "брат", "сестра", "сиблинг")));
+    sRow.append(card(f, "", "focus"));
+    const sps = spousesOf(f);
+    for (const s of sps) sRow.append(card(s, relWord(s, "муж", "жена", "партнёр")));
+    const addSp = addCard("супруг(а)", { spouseId: f.id, gender: f.gender === "m" ? "f" : f.gender === "f" ? "m" : "" });
+    if (addSp) sRow.append(addSp);
+    inner.append(sRow);
+
+    // Children
+    const kids = childrenOf(f.id);
+    const cRow = row();
+    for (const c of kids) cRow.append(card(c, relWord(c, "сын", "дочь", "ребёнок")));
+    const pf = { gender: "" };
+    if (f.gender === "f") pf.motherId = f.id; else pf.fatherId = f.id;
+    if (sps.length === 1) { if (f.gender === "f") pf.fatherId = sps[0].id; else pf.motherId = sps[0].id; }
+    if (f.gender === "m") pf.lastName = f.lastName || "";
+    const addC = addCard("ребёнок", pf); if (addC) cRow.append(addC);
+    if (cRow.children.length) inner.append(cRow);
+
+    // Grandchildren
+    const gk = kids.flatMap((c) => childrenOf(c.id));
+    if (gk.length) { const r = row(); for (const g of gk) r.append(card(g, relWord(g, "внук", "внучка", "внук/внучка"))); inner.append(r); }
+
+    drawLines(inner);
+    const fc = inner.querySelector(".pcard.focus");
+    if (fc) { const a = fc.getBoundingClientRect(), b = tree.getBoundingClientRect(); tree.scrollLeft += (a.left + a.width / 2) - (b.left + tree.clientWidth / 2); }
+    if (ro) { ro.disconnect(); ro.observe(inner); }
+  }
+
+  function drawLines(inner) {
+    const old = inner.querySelector("svg.tree-lines"); if (old) old.remove();
+    const base = inner.getBoundingClientRect();
+    const rects = new Map();
+    for (const c of inner.querySelectorAll(".pcard[data-id]")) {
+      const r = c.getBoundingClientRect();
+      rects.set(c.dataset.id, { l: r.left - base.left, r: r.right - base.left, t: r.top - base.top, b: r.bottom - base.top, cx: (r.left + r.right) / 2 - base.left, cy: (r.top + r.bottom) / 2 - base.top });
+    }
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "tree-lines"); svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("width", inner.scrollWidth); svg.setAttribute("height", inner.scrollHeight);
+    const path = (d, cls) => { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); if (cls) p.setAttribute("class", cls); svg.append(p); };
+    const coupled = (a, b) => Math.abs(a.cy - b.cy) < 4 && Math.min(Math.abs(b.l - a.r), Math.abs(a.l - b.r)) < 40;
+    const done = new Set();
+    const couple = (ida, idb) => {
+      const k = [ida, idb].sort().join("|"); if (done.has(k)) return;
+      const a = rects.get(ida), b = rects.get(idb); if (!a || !b || !coupled(a, b)) return;
+      done.add(k); const [L, R] = a.cx < b.cx ? [a, b] : [b, a];
+      path(`M${L.r} ${L.cy} H${R.l}`, "couple");
+    };
+    // one "bus" per set of parents shown on screen
+    const groups = new Map();
+    for (const id of rects.keys()) {
+      const p = P(id); if (!p) continue;
+      const ps = [p.fatherId, p.motherId].filter((x) => x && rects.has(x)).sort();
+      if (!ps.length) continue;
+      const k = ps.join("|"); if (!groups.has(k)) groups.set(k, { parents: ps, kids: [] });
+      groups.get(k).kids.push(id);
+    }
+    for (const { parents, kids } of groups.values()) {
+      const pr = parents.map((x) => rects.get(x));
+      let sx, sy;
+      if (pr.length === 2 && coupled(pr[0], pr[1])) {
+        couple(parents[0], parents[1]);
+        const [L, R] = pr[0].cx < pr[1].cx ? pr : [pr[1], pr[0]];
+        sx = (L.r + R.l) / 2; sy = L.cy;
+      } else { sx = pr.reduce((s, r) => s + r.cx, 0) / pr.length; sy = Math.max(...pr.map((r) => r.b)); }
+      const kr = kids.map((x) => rects.get(x));
+      const top = Math.min(...kr.map((r) => r.t));
+      if (top <= sy) continue;
+      const my = Math.max(sy + 8, top - 22);
+      const xs = kr.map((r) => r.cx).concat(sx);
+      let d = `M${sx} ${sy} V${my} M${Math.min(...xs)} ${my} H${Math.max(...xs)}`;
+      for (const r of kr) d += ` M${r.cx} ${my} V${r.t}`;
+      path(d);
+    }
+    const f = P(state.focus);
+    if (f) for (const s of spousesOf(f)) couple(f.id, s.id);
+    inner.prepend(svg);
+  }
+
+  function renderList() {
+    const main = $("main"); main.replaceChildren();
+    const search = el("input", { id: "list-search", type: "search", placeholder: "Поиск по имени, фамилии, месту…", value: state.q, "aria-label": "Поиск" });
+    search.addEventListener("input", () => { state.q = search.value; fillRows(); });
+    main.append(el("div", { class: "listbar" }, search, el("span", { class: "status", id: "list-count" })));
+    const tbody = el("tbody");
+    main.append(el("div", { class: "tablewrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, ["ФИО", "Годы жизни", "Место рождения", "Родители"].map((t) => el("th", { text: t })))), tbody)));
+    function fillRows() {
+      const q = state.q.trim().toLowerCase();
+      const list = [...state.people.values()].filter((p) => !q || [fullName(p), p.maidenName, p.birthPlace, p.deathPlace, p.notes].join(" ").toLowerCase().includes(q)).sort((a, b) => fullName(a).localeCompare(fullName(b), "ru"));
+      tbody.replaceChildren(...list.map((p) => el("tr", { tabindex: "0", onclick: () => { state.view = "tree"; setFocus(p.id); }, onkeydown: (e) => { if (e.key === "Enter") { state.view = "tree"; setFocus(p.id); } } },
+        el("td", {}, el("strong", { text: fullName(p) }), p.maidenName ? el("div", { class: "meta", text: "урожд. " + p.maidenName }) : null),
+        el("td", { class: "d", text: years(p) || "—" }),
+        el("td", { text: p.birthPlace || "—" }),
+        el("td", { text: parentsOf(p).map(shortName).join(", ") || "—" }))));
+      $("list-count").textContent = list.length + " из " + state.people.size;
+    }
+    fillRows();
+  }
+
+  function renderEmpty() {
+    const main = $("main");
+    main.replaceChildren(el("div", { class: "emptystate" },
+      el("h2", { text: state.loaded ? "Древо пока пустое" : "Здесь появятся ваши родственники" }),
+      el("p", { text: state.loaded
+        ? (state.canWrite ? "Начните с себя или со старшего родственника, о ком знаете больше всего. Потом добавляйте родителей, детей и супругов прямо из древа." : "Пока здесь никого нет. Когда родственники пришлют заполненные таблицы, люди появятся здесь.")
+        : "Подключаюсь к общей базе семьи…" }),
+      state.loaded && state.canWrite ? el("button", { class: "primary", type: "button", onclick: () => openForm(null, {}) }, "+ Добавить первого человека") : null));
+    $("side").replaceChildren(el("p", { class: "meta", text: "Выберите человека в древе, чтобы увидеть подробности." }));
+  }
+
+  let confirmDelete = false;
+  async function renderSide() {
+    const side = $("side"); const p = P(state.focus);
+    confirmDelete = false;
+    if (!p) { side.replaceChildren(el("p", { class: "meta", text: "Выберите человека в древе." })); return; }
+    const facts = el("dl", { class: "facts" });
+    const fact = (k, v, cls) => { if (v) facts.append(el("dt", { text: k }), el("dd", { class: cls || "", text: v })); };
+    fact("Девичья фамилия", p.maidenName);
+    fact("Родился(ась)", p.birthDate, "d"); fact("Место рождения", p.birthPlace);
+    fact("Умер(ла)", p.deathDate, "d"); fact("Место смерти", p.deathPlace);
+    const relLinks = (label, list) => list.length ? el("div", {}, el("div", { class: "meta", text: label }), el("div", { class: "links" }, list.map((x) => el("button", { class: "chip", type: "button", onclick: () => setFocus(x.id), text: shortName(x) })))) : null;
+    const meta = el("div", { class: "meta" });
+    const delBtn = el("button", { class: "danger", type: "button" }, "Удалить");
+    delBtn.addEventListener("click", async () => {
+      if (!confirmDelete) { confirmDelete = true; delBtn.textContent = "Точно удалить?"; delBtn.classList.add("confirm"); return; }
+      await removePerson(p.id);
+    });
+    side.replaceChildren(el("div", { class: "detail" },
+      el("div", {}, el("div", { class: "eyebrow", text: relWord(p, "мужчина", "женщина", "человек") }), el("div", { class: "full", text: fullName(p) }), el("div", { class: "yrs", style: "font-family:var(--f-data);color:var(--muted)", text: years(p) })),
+      facts.children.length ? facts : null,
+      p.notes ? el("p", { class: "notes", text: p.notes }) : null,
+      relLinks("Родители", parentsOf(p)), relLinks("Супруги", spousesOf(p)), relLinks("Братья и сёстры", siblingsOf(p)), relLinks("Дети", childrenOf(p.id)),
+      state.canWrite ? el("div", { class: "actions" }, el("button", { class: "primary", type: "button", onclick: () => openForm(p.id) }, "Редактировать"), delBtn) : null,
+      meta));
+    if (p.updatedBy && state.user) {
+      try { const ps = await state.user.profiles([p.updatedBy]); const n = ps[p.updatedBy]?.name; if (n && state.focus === p.id) meta.textContent = "Последнее изменение: " + n; } catch (e) {}
+    }
+  }
+
+  function render() {
+    $("tab-tree").setAttribute("aria-pressed", String(state.view === "tree"));
+    $("tab-list").setAttribute("aria-pressed", String(state.view === "list"));
+    $("btn-add").hidden = !(state.loaded && state.canWrite && state.people.size);
+    if (!state.people.size) return renderEmpty();
+    if (!P(state.focus)) state.focus = [...state.people.values()].sort(byBirth).at(-1).id;
+    if (state.view === "list") renderList(); else renderTree();
+    renderSide();
+  }
+
+  // ---------- form ----------
+  function fillSelect(sel, value, excludeId, preferGender) {
+    const opts = [...state.people.values()].filter((p) => p.id !== excludeId).sort((a, b) => (a.gender === preferGender ? 0 : 1) - (b.gender === preferGender ? 0 : 1) || fullName(a).localeCompare(fullName(b), "ru"));
+    sel.replaceChildren(el("option", { value: "", text: "— не указан(а) —" }), ...opts.map((p) => el("option", { value: p.id, text: fullName(p) + (years(p) ? " (" + years(p) + ")" : "") })));
+    sel.value = value || "";
+  }
+  function openForm(id, prefill = {}) {
+    if (!state.canWrite) return;
+    const p = id ? P(id) : {};
+    state.editing = id; state.prefill = prefill;
+    $("form-title").textContent = id ? "Редактировать: " + shortName(p) : "Новый человек";
+    $("f-last").value = p.lastName ?? prefill.lastName ?? "";
+    $("f-first").value = p.firstName || ""; $("f-middle").value = p.middleName || ""; $("f-maiden").value = p.maidenName || "";
+    $("f-gender").value = p.gender ?? prefill.gender ?? "";
+    $("f-bdate").value = p.birthDate || ""; $("f-bplace").value = p.birthPlace || "";
+    $("f-ddate").value = p.deathDate || ""; $("f-dplace").value = p.deathPlace || ""; $("f-notes").value = p.notes || "";
+    fillSelect($("f-father"), p.fatherId ?? prefill.fatherId, id, "m");
+    fillSelect($("f-mother"), p.motherId ?? prefill.motherId, id, "f");
+    const current = new Set(id ? spousesOf(p).map((s) => s.id) : (prefill.spouseId ? [prefill.spouseId] : []));
+    const box = $("f-spouses");
+    const cands = [...state.people.values()].filter((o) => o.id !== id).sort((a, b) => fullName(a).localeCompare(fullName(b), "ru"));
+    const checks = (set) => cands.length ? cands.map((o) => el("label", {}, el("input", { type: "checkbox", value: o.id, checked: set.has(o.id) }), shortName(o))) : [el("span", { class: "hint", text: "Пока некого выбрать" })];
+    box.replaceChildren(...checks(current));
+    const sibSet = new Set(id ? explicitSiblings(p) : (prefill.siblingId ? [prefill.siblingId] : []));
+    $("f-siblings").replaceChildren(...checks(sibSet));
+    $("form-err").textContent = "";
+    $("form-save").disabled = false;
+    $("dlg").showModal();
+    setTimeout(() => $("f-first").focus(), 30);
+  }
+  $("form-cancel").addEventListener("click", () => $("dlg").close());
+  $("pform").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const first = $("f-first").value.trim();
+    if (!first) { $("form-err").textContent = "Укажите хотя бы имя."; $("f-first").focus(); return; }
+    const id = state.editing || ("p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+    const old = P(id) || {};
+    const spouseIds = [...$("f-spouses").querySelectorAll("input:checked")].map((i) => i.value);
+    const siblingIds = [...$("f-siblings").querySelectorAll("input:checked")].map((i) => i.value);
+    const doc = {
+      firstName: first, lastName: $("f-last").value.trim(), middleName: $("f-middle").value.trim(), maidenName: $("f-maiden").value.trim(),
+      gender: $("f-gender").value, birthDate: $("f-bdate").value.trim(), birthPlace: $("f-bplace").value.trim(),
+      deathDate: $("f-ddate").value.trim(), deathPlace: $("f-dplace").value.trim(), notes: $("f-notes").value.trim(),
+      fatherId: $("f-father").value || "", motherId: $("f-mother").value || "", spouseIds, siblingIds,
+      createdBy: old.createdBy || state.myId || "", createdAt: old.createdAt || new Date().toISOString(),
+      updatedBy: state.myId || "", updatedAt: new Date().toISOString(),
+    };
+    $("form-save").disabled = true;
+    try {
+      await state.db.collection("people").doc(id).set(doc);
+      // prefill relations that point FROM another person to this one
+      const pf = state.prefill || {};
+      if (!state.editing && pf.childId) {
+        const c = P(pf.childId);
+        if (c) await state.db.collection("people").doc(c.id).update({ [doc.gender === "f" ? "motherId" : "fatherId"]: id, updatedBy: state.myId || "", updatedAt: new Date().toISOString() });
+      }
+      // keep spouse and sibling links symmetric
+      for (const [field, ids] of [["spouseIds", spouseIds], ["siblingIds", siblingIds]]) {
+        for (const sid of ids) { const s = P(sid); if (s && !(s[field] || []).includes(id)) await state.db.collection("people").doc(sid).update({ [field]: [...(s[field] || []), id] }); }
+        for (const o of state.people.values()) {
+          if (o.id !== id && (o[field] || []).includes(id) && !ids.includes(o.id)) await state.db.collection("people").doc(o.id).update({ [field]: o[field].filter((x) => x !== id) });
+        }
+      }
+      $("dlg").close();
+      state.focus = pf.childId && !state.editing ? state.focus : id;
+      setFocus(state.focus);
+    } catch (err) {
+      $("form-save").disabled = false;
+      if (err && err.code === "invalid_argument" && !state.canWriteKnown) { state.canWrite = false; $("dlg").close(); setStatus("У вас доступ только для просмотра. Попросите владельца сделать вас участником.", true); render(); return; }
+      $("form-err").textContent = err && err.code === "quota_exceeded" ? "База заполнена: удалите лишние записи." : "Не удалось сохранить. Проверьте интернет и попробуйте ещё раз.";
+    }
+  });
+
+  async function removePerson(id) {
+    try {
+      for (const o of state.people.values()) {
+        if (o.id === id) continue;
+        const patch = {};
+        if (o.fatherId === id) patch.fatherId = "";
+        if (o.motherId === id) patch.motherId = "";
+        if ((o.spouseIds || []).includes(id)) patch.spouseIds = o.spouseIds.filter((x) => x !== id);
+        if ((o.siblingIds || []).includes(id)) patch.siblingIds = o.siblingIds.filter((x) => x !== id);
+        if (Object.keys(patch).length) await state.db.collection("people").doc(o.id).update(patch);
+      }
+      await state.db.collection("people").doc(id).delete();
+      state.focus = null; setFocus(null);
+    } catch (e) { setStatus("Не удалось удалить. Попробуйте ещё раз.", true); }
+  }
+
+  // ---------- wiring ----------
+  $("tab-tree").addEventListener("click", () => { state.view = "tree"; render(); });
+  $("tab-list").addEventListener("click", () => { state.view = "list"; render(); });
+  $("btn-add").addEventListener("click", () => openForm(null, {}));
+  try { const v = localStorage.getItem("ft-view"); if (v === "list") state.view = "list"; } catch (e) {}
+  const h0 = location.hash.slice(1); if (h0) state.focus = h0;
+
+  renderEmpty();
+
+  (() => {
+    state.canWrite = false; state.loaded = true;
+    let data = { people: [], updated: "" };
+    try { data = JSON.parse(document.getElementById("tree-data").textContent); } catch (e) {}
+    state.people = new Map((data.people || []).map((p) => [p.id, p]));
+    if (!P(state.focus) && data.start && P(data.start)) state.focus = data.start;
+    const n = state.people.size;
+    const word = [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "человека" : "человек";
+    setStatus(n ? n + " " + word + " в древе" + (data.updated ? " · обновлено " + data.updated : "") : "");
+    render();
+  })();
+  for (const t of ["tab-tree", "tab-list"]) $(t).addEventListener("click", () => { try { localStorage.setItem("ft-view", state.view); } catch (e) {} });
+})();
+</script>
+
+</body>
+</html>
